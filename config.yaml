@@ -1,0 +1,12 @@
+# CLIP-JEPA Training Configuration
+debug: false
+batch_size: 56
+epochs: 2
+learning_rate: 1.0e-3
+log_every_n_steps: 50
+
+lora_config:
+  use_qlora: false
+
+data_config:
+  dataset: "jxie/coco_captions"

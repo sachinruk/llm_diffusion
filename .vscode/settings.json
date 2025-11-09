@@ -1,0 +1,20 @@
+{
+    "python.defaultInterpreterPath": ".venv/bin/python",
+    "python.terminal.activateEnvironment": true,
+    "files.autoSave": "afterDelay",
+    "files.autoSaveDelay": 1000,
+    "files.insertFinalNewline": true,
+    "editor.formatOnSave": true,
+    "notebook.formatOnSave.enabled": true,
+    "[python]": {
+        "editor.defaultFormatter": "charliermarsh.ruff"
+    },
+    "ruff.lineLength": 100,
+    "ruff.lint.enable": true,
+    // "ruff.lint.run": "onType",
+    "python.envFile": "${workspaceFolder}/.env",
+    "jupyter.notebookFileRoot": "${workspaceFolder}",
+    "terminal.integrated.env.osx": {
+        "PYTHONPATH": "${workspaceFolder}"
+    }
+}
