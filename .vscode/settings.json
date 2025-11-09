@@ -5,15 +5,35 @@
     "files.autoSaveDelay": 1000,
     "files.insertFinalNewline": true,
     "editor.formatOnSave": true,
-    "notebook.formatOnSave.enabled": true,
     "[python]": {
-        "editor.defaultFormatter": "charliermarsh.ruff"
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.quickSuggestions": {
+            "other": true,
+            "comments": false,
+            "strings": true
+        },
+        "editor.wordBasedSuggestions": "allDocuments",
+        "editor.suggest.snippetsPreventQuickSuggestions": false,
+        "editor.tabCompletion": "on"
     },
     "ruff.lineLength": 100,
     "ruff.lint.enable": true,
-    // "ruff.lint.run": "onType",
-    "python.envFile": "${workspaceFolder}/.env",
-    "jupyter.notebookFileRoot": "${workspaceFolder}",
+    "[jupyter]": {
+        "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.quickSuggestions": {
+            "other": true,
+            "comments": false,
+            "strings": true
+        },
+        "editor.wordBasedSuggestions": "allDocuments",
+        "editor.suggest.snippetsPreventQuickSuggestions": false,
+        "editor.tabCompletion": "on"
+    },
+    "notebook.formatOnSave.enabled": true,
+    "notebook.codeActionsOnSave": {
+        // "notebook.source.fixAll": "explicit",
+        "notebook.source.organizeImports": "explicit"
+    },
     "terminal.integrated.env.osx": {
         "PYTHONPATH": "${workspaceFolder}"
     }
