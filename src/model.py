@@ -1,3 +1,4 @@
+import peft
 import transformers
 import torch
 
@@ -21,6 +22,15 @@ def get_model_and_tokenizer(
     tokenizer.add_special_tokens({"additional_special_tokens": [config.MASK_TOKEN]})
     llm_model.resize_token_embeddings(len(tokenizer))
     return llm_model, tokenizer
+
+def get_lora_model(model: transformers.modeling_utils.PreTrainedModel, hyper_parameters: config.HyperParameters) -> transformers.modeling_utils.PreTrainedModel:
+    # Configure LoRA
+    lora_config = peft.LoraConfig(**hyper_parameters.lora_config.model_dump())
+
+    # Apply LoRA to the model
+    lora_model = peft.get_peft_model(model, lora_config)
+    lora_model.print_trainable_parameters()
+    return lora_model
 
 def patch_causal_attention():
     if not hasattr(torch.nn.functional.scaled_dot_product_attention, "_is_patched"):
