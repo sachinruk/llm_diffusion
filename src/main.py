@@ -2,12 +2,12 @@ import datetime
 import os
 
 import click
-import torch
-from loguru import logger
 import lightning as L
+import torch
 import wandb
+from loguru import logger
 
-from src import config, data, losses, model, trainer, vision_model
+from src import config, data, model
 
 
 def _wandb_init(hyper_parameters: config.HyperParameters):
@@ -40,7 +40,6 @@ def _setup_environment(hyper_parameters: config.HyperParameters):
 
     # Create output directories
     hyper_parameters.output_dir.mkdir(parents=True, exist_ok=True)
-    hyper_parameters.lora_config.lora_weight_path.mkdir(parents=True, exist_ok=True)
     hyper_parameters.wandb_config.wandb_log_path.mkdir(parents=True, exist_ok=True)
 
 
@@ -73,7 +72,25 @@ def main(hyper_parameters_json: str):
         device = torch.device("cpu")
     logger.info(f"Using device: {device}")
 
-    logger.info("done")
+    train_dataset, eval_dataset = data.load_dataset(hyper_parameters)
+    llm_model, tokenizer = model.get_model_and_tokenizer(hyper_parameters, device)
+    model.patch_causal_attention()
+
+    model_trainer_config = model.ModelTrainerConfig(
+        model=llm_model,
+        sft_config=model.get_sft_config(hyper_parameters),
+        train_dataset=train_dataset,
+        eval_dataset=eval_dataset,
+        data_collator=data.PretrainingCollateFn(tokenizer),
+    )
+    trainer = model.get_trainer(model_trainer_config, hyper_parameters)
+    trainer.train()
+    logger.info("Pretraining complete")
+
+    model_trainer_config.data_collator = data.SFTCollateFn(tokenizer)
+    trainer = model.get_trainer(model_trainer_config, hyper_parameters)
+    trainer.train()
+    logger.info("SFT complete")
 
 
 if __name__ == "__main__":
