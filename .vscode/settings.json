@@ -7,6 +7,10 @@
     "editor.formatOnSave": true,
     "[python]": {
         "editor.defaultFormatter": "charliermarsh.ruff",
+        "editor.codeActionsOnSave": {
+            "source.fixAll": "explicit",
+            "source.organizeImports": "explicit"
+        },
         "editor.quickSuggestions": {
             "other": true,
             "comments": false,
@@ -16,8 +20,17 @@
         "editor.suggest.snippetsPreventQuickSuggestions": false,
         "editor.tabCompletion": "on"
     },
+    "python.testing.unittestEnabled": false,
+    "python.testing.pytestEnabled": true,
+    "python.testing.cwd": "${workspaceRoot}",
+    "python.testing.pytestArgs": [
+        "tests",
+    ],
     "ruff.lineLength": 100,
     "ruff.lint.enable": true,
+    "ruff.enable": true,
+    "ruff.organizeImports": true,
+    "ruff.fixAll": true,
     "[jupyter]": {
         "editor.defaultFormatter": "charliermarsh.ruff",
         "editor.quickSuggestions": {

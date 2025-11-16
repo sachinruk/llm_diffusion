@@ -8,6 +8,7 @@ lightning
 loguru
 peft
 pyyaml
+pytest
 qwen_vl_utils
 ruff
 timm
@@ -15,4 +16,5 @@ torch==2.8.0
 torchvision
 tqdm
 transformers
+trl==0.25.1
 wandb

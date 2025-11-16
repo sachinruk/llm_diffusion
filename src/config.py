@@ -1,6 +1,7 @@
+import pathlib
+
 import pydantic
 import torch
-import pathlib
 
 MASK_TOKEN = "<|mask|>"
 IM_START_TOKEN = "<|im_start|>"
@@ -11,12 +12,14 @@ device: torch.device = torch.device(
 
 
 class WandbConfig(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(extra="forbid")
     project: str = "llm-diffusion"
     entity: str = "sachinruk"
     wandb_log_path: pathlib.Path = pathlib.Path("/tmp/wandb")
 
 
 class LoraConfig(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(extra="forbid")
     r: int = 16
     lora_alpha: int = 32
     lora_dropout: float = 0.05
@@ -33,14 +36,20 @@ class LoraConfig(pydantic.BaseModel):
 
 
 class HyperParameters(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(extra="forbid")
     model: str = "Qwen/Qwen3-4B-Instruct-2507"
     dataset: str = "allenai/tulu-3-sft-mixture-0225"
     debug: bool = False
     seed: int = 42
-    lr: float = 2e-4
+    learning_rate: float = 2e-4
+    test_size: float = 0.1
+    dataloader_num_workers: int = 4
+    pin_memory: bool = True
+    output_dir: pathlib.Path = pathlib.Path("/tmp/output")
     epochs: int = 1
     batch_size: int = 16
     gradient_accumulation_steps: int = 4
     log_interval: int = 1000
     lora_config: LoraConfig = LoraConfig()
     wandb_config: WandbConfig = WandbConfig()
+    log_frequency_per_epoch: int = 4
