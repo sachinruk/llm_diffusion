@@ -53,3 +53,5 @@ class HyperParameters(pydantic.BaseModel):
     lora_config: LoraConfig = LoraConfig()
     wandb_config: WandbConfig = WandbConfig()
     log_frequency_per_epoch: int = 4
+
+    max_length: int = 768

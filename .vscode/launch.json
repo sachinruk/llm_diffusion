@@ -12,7 +12,7 @@
             "program": "${workspaceFolder}/src/main.py",
             "args": [
                 "--hyper-parameters-json",
-                "{\"debug\": true, \"batch_size\": 4, \"epochs\": 1, \"learning_rate\": 1e-3, \"log_frequency_per_epoch\": 10}"
+                "{\"debug\": true, \"batch_size\": 4, \"epochs\": 1, \"learning_rate\": 1e-3, \"log_frequency_per_epoch\": 10, \"dataloader_num_workers\": 0}"
             ]
         },
         {

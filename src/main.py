@@ -81,16 +81,17 @@ def main(hyper_parameters_json: str):
         sft_config=model.get_sft_config(hyper_parameters),
         train_dataset=train_dataset,
         eval_dataset=eval_dataset,
-        data_collator=data.PretrainingCollateFn(tokenizer),
+        data_collator=data.PretrainingCollateFn(tokenizer, max_length=hyper_parameters.max_length),
     )
     trainer = model.get_trainer(model_trainer_config, hyper_parameters)
     trainer.train()
     logger.info("Pretraining complete")
 
-    model_trainer_config.data_collator = data.SFTCollateFn(tokenizer)
-    trainer = model.get_trainer(model_trainer_config, hyper_parameters)
+    # Change data collator for SFT phase and continue training the same LoRA
+    trainer.data_collator = data.SFTCollateFn(tokenizer, max_length=hyper_parameters.max_length)
     trainer.train()
     logger.info("SFT complete")
+    trainer.save_model(str(hyper_parameters.output_dir / "sft_model"))
 
 
 if __name__ == "__main__":
