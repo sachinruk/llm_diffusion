@@ -19,7 +19,7 @@ def load_dataset(
         download_mode=datasets.DownloadMode.REUSE_DATASET_IF_EXISTS,
     )
     if hyper_parameters.debug:
-        raw_dataset = raw_dataset.select(range(100))
+        raw_dataset = raw_dataset.shuffle(seed=hyper_parameters.seed).select(range(100))
         logger.info(f"Debug mode: {raw_dataset.num_rows} rows")
     else:
         logger.info(f"Training mode: {raw_dataset.num_rows} rows")

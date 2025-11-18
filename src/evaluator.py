@@ -9,8 +9,6 @@ from torch.utils.data import DataLoader
 
 from src import data
 
-__all__ = ["evaluate_accelerate", "FourTimesSchedule", "AccelerateEvalCallback"]
-
 
 @torch.inference_mode()
 def evaluate_accelerate(
@@ -37,7 +35,7 @@ def evaluate_accelerate(
     )
 
     if accelerator is not None:
-        model, dataloader = accelerator.prepare(model, dataloader)
+        dataloader = accelerator.prepare_data_loader(dataloader)
         device: torch.device = accelerator.device  # type: ignore[assignment]
     else:
         device = model.device  # type: ignore[assignment]
@@ -63,36 +61,15 @@ def evaluate_accelerate(
         total_correct_nonmask += (correct & non_mask_token_id_mask).sum().item()
         total_tokens_nonmask += non_mask_token_id_mask.sum().item()
 
-        # correct = accelerator.pad_across_processes(correct, dim=1, pad_index=0)
-        # mask_pos = accelerator.pad_across_processes(mask_pos, dim=1, pad_index=0)
-        # nonmask_pos = accelerator.pad_across_processes(nonmask_pos, dim=1, pad_index=0)
-
-        # correct_g = accelerator.gather_for_metrics(correct.int())
-        # mask_pos_g = accelerator.gather_for_metrics(mask_pos.int())
-        # nonmask_pos_g = accelerator.gather_for_metrics(nonmask_pos.int())
-
-        # total_correct_mask += (correct_g.bool() & mask_pos_g.bool()).sum().item()
-        # total_tokens_mask += mask_pos_g.sum().item()
-
-        # total_correct_nonmask += (correct_g.bool() & nonmask_pos_g.bool()).sum().item()
-        # total_tokens_nonmask += nonmask_pos_g.sum().item()
-
-    # Merge across processes and broadcast the merged result
-    if accelerator is not None and accelerator.num_processes > 1:
-        # Gather confusion matrices from all processes
-        all_total_correct_mask: list[None | int] = [None] * accelerator.num_processes
-        all_total_tokens_mask: list[None | int] = [None] * accelerator.num_processes
-        all_total_correct_nonmask: list[None | int] = [None] * accelerator.num_processes
-        all_total_tokens_nonmask: list[None | int] = [None] * accelerator.num_processes
-        torch.distributed.all_gather_object(all_total_correct_mask, total_correct_mask)
-        torch.distributed.all_gather_object(all_total_tokens_mask, total_tokens_mask)
-        torch.distributed.all_gather_object(all_total_correct_nonmask, total_correct_nonmask)
-        torch.distributed.all_gather_object(all_total_tokens_nonmask, total_tokens_nonmask)
-
-        total_correct_mask = sum(all_total_correct_mask)
-        total_tokens_mask = sum(all_total_tokens_mask)
-        total_correct_nonmask = sum(all_total_correct_nonmask)
-        total_tokens_nonmask = sum(all_total_tokens_nonmask)
+    totals: torch.Tensor = torch.tensor(
+        [total_correct_mask, total_tokens_mask, total_correct_nonmask, total_tokens_nonmask],
+        device=device,
+        dtype=torch.long,
+    )
+    totals = accelerator.reduce(totals, reduction="sum") if accelerator is not None else totals
+    total_correct_mask, total_tokens_mask, total_correct_nonmask, total_tokens_nonmask = map(
+        int, totals.tolist()
+    )
 
     mask_acc = total_correct_mask / total_tokens_mask
     nonmask_acc = total_correct_nonmask / total_tokens_nonmask

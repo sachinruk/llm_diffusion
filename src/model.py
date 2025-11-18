@@ -96,7 +96,7 @@ def get_sft_config(hyper_parameters: config.HyperParameters) -> trl.SFTConfig:
         dataset_kwargs={"skip_prepare_dataset": True},
         remove_unused_columns=False,
         group_by_length=False,
-        dataloader_pin_memory=True,
+        dataloader_pin_memory=True if torch.cuda.is_available() else False,
         ddp_find_unused_parameters=False,
         dataloader_num_workers=hyper_parameters.dataloader_num_workers,
         # use_liger_kernel=hyper_parameters.use_liger_kernel,
