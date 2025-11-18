@@ -57,13 +57,13 @@ class AccuracyCallback(transformers.TrainerCallback):
             ]
             batch = self.collate_fn(sample_data)
             self.model.eval()
-            overall_accuracy, mask_accuracy = _calculate_accuracy(
+            non_mask_accuracy, mask_accuracy = _calculate_accuracy(
                 self.model, batch, self.collate_fn.mask_token_id
             )
             self.model.train()
             wandb.log(
                 {
-                    "overall_accuracy": overall_accuracy,
+                    "non_mask_accuracy": non_mask_accuracy,
                     "mask_accuracy": mask_accuracy,
                     "step": state.global_step,
                 }

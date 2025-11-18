@@ -105,7 +105,9 @@ def get_sft_config(hyper_parameters: config.HyperParameters) -> trl.SFTConfig:
 
 
 def get_trainer(
-    model_trainer_config: ModelTrainerConfig, hyper_parameters: config.HyperParameters
+    model_trainer_config: ModelTrainerConfig,
+    callbacks: list[transformers.TrainerCallback],
+    hyper_parameters: config.HyperParameters,
 ) -> trl.SFTTrainer:
     lora_config = peft.LoraConfig(**hyper_parameters.lora_config.model_dump())
 
@@ -116,4 +118,5 @@ def get_trainer(
         eval_dataset=model_trainer_config.eval_dataset,
         data_collator=model_trainer_config.data_collator,
         peft_config=lora_config,
+        callbacks=callbacks,
     )

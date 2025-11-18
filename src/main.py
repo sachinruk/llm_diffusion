@@ -7,7 +7,7 @@ import torch
 import wandb
 from loguru import logger
 
-from src import config, data, model
+from src import config, data, evaluator, model
 
 
 def _wandb_init(hyper_parameters: config.HyperParameters):
@@ -63,6 +63,7 @@ def main(hyper_parameters_json: str):
     _wandb_init(hyper_parameters)
     logger.info(f"Hyperparameters: {hyper_parameters.model_dump_json(indent=2)}")
     _setup_environment(hyper_parameters)
+    world_size = int(os.environ.get("WORLD_SIZE", "1"))
 
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -83,7 +84,21 @@ def main(hyper_parameters_json: str):
         eval_dataset=eval_dataset,
         data_collator=data.PretrainingCollateFn(tokenizer, max_length=hyper_parameters.max_length),
     )
-    trainer = model.get_trainer(model_trainer_config, hyper_parameters)
+    callbacks = [
+        evaluator.AccelerateEvalCallback(
+            eval_dataset=model_trainer_config.eval_dataset,
+            collate_fn=model_trainer_config.data_collator,
+            mask_token_id=tokenizer.convert_tokens_to_ids(config.MASK_TOKEN),
+            per_device_eval_batch_size=hyper_parameters.batch_size,
+            log_interval=(
+                len(train_dataset)
+                // hyper_parameters.batch_size
+                // world_size
+                // hyper_parameters.log_frequency_per_epoch
+            ),
+        ),
+    ]
+    trainer = model.get_trainer(model_trainer_config, callbacks, hyper_parameters)
     trainer.train()
     logger.info("Pretraining complete")
 
