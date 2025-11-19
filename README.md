@@ -421,3 +421,16 @@ If you use this code in your research, please cite:
 - [BERT](https://arxiv.org/abs/1810.04805) - Masked language modeling
 - [LoRA](https://arxiv.org/abs/2106.09685) - Low-Rank Adaptation for efficient fine-tuning
 - [QLoRA](https://arxiv.org/abs/2305.14314) - Efficient fine-tuning with quantization
+
+---
+## To run this do:
+
+```bash
+nohup ./run.sh > training_nohup.log 2>&1 &
+```
+
+to view the logs do:
+
+```bash
+tail -f training_nohup.log
+```
