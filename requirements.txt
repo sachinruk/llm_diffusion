@@ -4,7 +4,6 @@ click
 datasets
 einops
 ipywidgets
-lightning
 loguru
 peft
 pyyaml

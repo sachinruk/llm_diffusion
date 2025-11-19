@@ -1,8 +1,9 @@
 import datetime
 import os
+import random
 
 import click
-import lightning as L
+import numpy as np
 import torch
 import wandb
 from loguru import logger
@@ -26,8 +27,14 @@ def _wandb_init(hyper_parameters: config.HyperParameters):
     )
 
 
-def _setup_environment(hyper_parameters: config.HyperParameters):
-    L.seed_everything(hyper_parameters.seed)
+def _setup_environment(hyper_parameters: config.HyperParameters, rank: int):
+    # Seed all random number generators
+    random.seed(hyper_parameters.seed + rank)
+    np.random.seed(hyper_parameters.seed + rank)
+    torch.manual_seed(hyper_parameters.seed + rank)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(hyper_parameters.seed + rank)
+
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
     # Empty torch cache before starting
@@ -62,9 +69,11 @@ def main(hyper_parameters_json: str):
     hyper_parameters = config.HyperParameters.model_validate_json(hyper_parameters_json)
     _wandb_init(hyper_parameters)
     logger.info(f"Hyperparameters: {hyper_parameters.model_dump_json(indent=2)}")
-    _setup_environment(hyper_parameters)
+
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+    rank = int(os.environ.get("RANK", "0"))
+    _setup_environment(hyper_parameters, rank)
     if torch.cuda.is_available():
         torch.cuda.set_device(local_rank)  # <-- critical
 
