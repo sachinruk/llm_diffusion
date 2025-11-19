@@ -18,6 +18,14 @@ class WandbConfig(pydantic.BaseModel):
     wandb_log_path: pathlib.Path = pathlib.Path("/tmp/wandb")
 
 
+class QLoRAConfig(pydantic.BaseModel):
+    model_config = pydantic.ConfigDict(extra="forbid")
+    load_in_4bit: bool = True
+    bnb_4bit_quant_type: str = "nf4"  # or "fp4"
+    bnb_4bit_use_double_quant: bool = True
+    bnb_4bit_compute_dtype: str = "bfloat16"  # use "float16" if your GPU lacks bf16
+
+
 class LoraConfig(pydantic.BaseModel):
     model_config = pydantic.ConfigDict(extra="forbid")
     r: int = 16
@@ -53,5 +61,8 @@ class HyperParameters(pydantic.BaseModel):
     lora_config: LoraConfig = LoraConfig()
     wandb_config: WandbConfig = WandbConfig()
     log_frequency_per_epoch: int = 4
+
+    use_qlora: bool = False
+    qlora_config: QLoRAConfig = QLoRAConfig()
 
     max_length: int = 768

@@ -21,13 +21,28 @@ class ModelTrainerConfig:
 def get_model_and_tokenizer(
     hyper_parameters: config.HyperParameters, device: torch.device
 ) -> tuple[transformers.modeling_utils.PreTrainedModel, transformers.PreTrainedTokenizer]:
-    llm_model: transformers.modeling_utils.PreTrainedModel = (
-        transformers.AutoModelForCausalLM.from_pretrained(
-            pretrained_model_name_or_path=hyper_parameters.model,
-            torch_dtype=torch.bfloat16 if device.type in {"cuda", "mps"} else torch.float32,
-            attn_implementation="flash_attention_2" if device.type == "cuda" else "sdpa",
-            device_map="auto",
+    quantization_config = None
+    torch_dtype: torch.dtype | None = (
+        torch.bfloat16 if device.type in {"cuda", "mps"} else torch.float32
+    )
+
+    # QLoRA only on CUDA (bitsandbytes requirement)
+    if hyper_parameters.use_qlora and device.type == "cuda":
+        q = hyper_parameters.qlora_config
+        quantization_config = transformers.BitsAndBytesConfig(
+            load_in_4bit=q.load_in_4bit,
+            bnb_4bit_quant_type=q.bnb_4bit_quant_type,
+            bnb_4bit_use_double_quant=q.bnb_4bit_use_double_quant,
+            bnb_4bit_compute_dtype=getattr(torch, q.bnb_4bit_compute_dtype),
         )
+        torch_dtype = None  # bnb decides compute dtype
+
+    llm_model: transformers.PreTrainedModel = transformers.AutoModelForCausalLM.from_pretrained(
+        pretrained_model_name_or_path=hyper_parameters.model,
+        device_map="auto",
+        attn_implementation="sdpa",
+        torch_dtype=torch_dtype,
+        quantization_config=quantization_config,
     )
     tokenizer: transformers.PreTrainedTokenizer = transformers.AutoTokenizer.from_pretrained(
         hyper_parameters.model
@@ -109,6 +124,11 @@ def get_trainer(
     callbacks: list[transformers.TrainerCallback],
     hyper_parameters: config.HyperParameters,
 ) -> trl.SFTTrainer:
+    if hyper_parameters.use_qlora:
+        model_trainer_config.model = peft.prepare_model_for_kbit_training(
+            model_trainer_config.model, use_gradient_checkpointing=True
+        )
+
     lora_config = peft.LoraConfig(**hyper_parameters.lora_config.model_dump())
 
     return trl.SFTTrainer(

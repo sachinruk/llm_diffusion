@@ -16,6 +16,13 @@ SCRIPT_DIR="$(git rev-parse --show-toplevel)"
 CONFIG_FILE="${SCRIPT_DIR}/config.yaml"
 LOG_FILE="${SCRIPT_DIR}/training_$(date +%Y%m%d_%H%M%S).log"
 
+export PYTHONPATH=$SCRIPT_DIR:${PYTHONPATH:-}
+export CANVA_FLAVOR=local
+export CUDA_LAUNCH_BLOCKING=1
+export TORCH_SHOW_CPP_STACKTRACES=1
+export TORCH_NCCL_ASYNC_ERROR_HANDLING=1
+export TORCH_NCCL_BLOCKING_WAIT=1
+
 echo "Script directory: ${SCRIPT_DIR}"
 echo "Config file: ${CONFIG_FILE}"
 echo "Log file: ${LOG_FILE}"
@@ -59,7 +66,12 @@ echo ""
 # Run training and capture output to both console and log file
 cd "${SCRIPT_DIR}"
 source .venv/bin/activate
-python3 -m src.main --hyper-parameters-json "${HYPERPARAMETERS_JSON}" 2>&1 | tee "${LOG_FILE}"
+NUM_GPUS=${NUM_GPUS:-$(nvidia-smi -L | wc -l)}
+accelerate launch \
+  --num_processes="${NUM_GPUS}" \
+  --mixed_precision=bf16 \
+  --module src.main -- \
+  --hyper-parameters-json "${HYPERPARAMETERS_JSON}" 2>&1 | tee "${LOG_FILE}"
 
 # Check if training succeeded
 TRAINING_EXIT_CODE=${PIPESTATUS[0]}
