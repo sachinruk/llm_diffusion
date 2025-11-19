@@ -1,8 +1,9 @@
 debug: false
-batch_size: 64
+batch_size: 4
 epochs: 2
 learning_rate: 1.0e-3
-use_qlora: true
+use_qlora: false
+dataloader_num_workers: 8
 
 lora_config:
   r: 8

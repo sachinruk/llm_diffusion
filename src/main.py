@@ -64,6 +64,10 @@ def main(hyper_parameters_json: str):
     logger.info(f"Hyperparameters: {hyper_parameters.model_dump_json(indent=2)}")
     _setup_environment(hyper_parameters)
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
+    local_rank = int(os.environ.get("LOCAL_RANK", "0"))
+    if torch.cuda.is_available():
+        torch.cuda.set_device(local_rank)  # <-- critical
+
 
     if torch.cuda.is_available():
         device = torch.device("cuda")
@@ -76,6 +80,13 @@ def main(hyper_parameters_json: str):
     train_dataset, eval_dataset = data.load_dataset(hyper_parameters)
     llm_model, tokenizer = model.get_model_and_tokenizer(hyper_parameters, device)
     model.patch_causal_attention()
+    rank = os.environ.get("LOCAL_RANK", "?")
+    print(
+        f"[rank{rank}] visible={os.environ.get('CUDA_VISIBLE_DEVICES')} "
+        f"acc_device_should_be=cuda:0  "
+        f"hf_device_map={getattr(llm_model, 'hf_device_map', None)}  "
+        f"is_4bit={getattr(llm_model, 'is_loaded_in_4bit', False)}"
+    )
 
     model_trainer_config = model.ModelTrainerConfig(
         model=llm_model,

@@ -16,12 +16,15 @@ SCRIPT_DIR="$(git rev-parse --show-toplevel)"
 CONFIG_FILE="${SCRIPT_DIR}/config.yaml"
 LOG_FILE="${SCRIPT_DIR}/training_$(date +%Y%m%d_%H%M%S).log"
 
+source .venv/bin/activate
+
 export PYTHONPATH=$SCRIPT_DIR:${PYTHONPATH:-}
 export CANVA_FLAVOR=local
 export CUDA_LAUNCH_BLOCKING=1
 export TORCH_SHOW_CPP_STACKTRACES=1
 export TORCH_NCCL_ASYNC_ERROR_HANDLING=1
 export TORCH_NCCL_BLOCKING_WAIT=1
+export TOKENIZERS_PARALLELISM=false
 
 echo "Script directory: ${SCRIPT_DIR}"
 echo "Config file: ${CONFIG_FILE}"
@@ -65,7 +68,6 @@ echo ""
 
 # Run training and capture output to both console and log file
 cd "${SCRIPT_DIR}"
-source .venv/bin/activate
 NUM_GPUS=${NUM_GPUS:-$(nvidia-smi -L | wc -l)}
 accelerate launch \
   --num_processes="${NUM_GPUS}" \
