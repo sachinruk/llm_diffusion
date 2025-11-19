@@ -65,19 +65,23 @@ def main(hyper_parameters_json: str):
         python -m src.main --hyper-parameters-json '{"epochs": 10, "batch_size": 16}'
     """
     # Parse hyperparameters
-    logger.info("Parsing hyperparameters...")
-    hyper_parameters = config.HyperParameters.model_validate_json(hyper_parameters_json)
-    _wandb_init(hyper_parameters)
-    logger.info(f"Hyperparameters: {hyper_parameters.model_dump_json(indent=2)}")
-
     world_size = int(os.environ.get("WORLD_SIZE", "1"))
     local_rank = int(os.environ.get("LOCAL_RANK", "0"))
     rank = int(os.environ.get("RANK", "0"))
+    if rank != 0:
+        import logging
+
+        logging.getLogger().setLevel(logging.ERROR)
+        logger.disable("")  # Disable all loguru logging
+
+    logger.info("Parsing hyperparameters...")
+    hyper_parameters = config.HyperParameters.model_validate_json(hyper_parameters_json)
+    if rank == 0:
+        _wandb_init(hyper_parameters)
+    logger.info(f"Hyperparameters: {hyper_parameters.model_dump_json(indent=2)}")
     _setup_environment(hyper_parameters, rank)
     if torch.cuda.is_available():
         torch.cuda.set_device(local_rank)  # <-- critical
-
-    if torch.cuda.is_available():
         device = torch.device("cuda")
     elif torch.backends.mps.is_available() and torch.backends.mps.is_built():
         device = torch.device("mps")
