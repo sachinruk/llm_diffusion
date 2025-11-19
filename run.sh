@@ -6,7 +6,7 @@ set -euo pipefail
 # This script reads hyperparameters from config.yaml and runs training
 
 echo "========================================"
-echo "CLIP-JEPA Training Script"
+echo "LLM Diffusion Training Script"
 echo "========================================"
 echo "Start time: $(date)"
 echo ""
