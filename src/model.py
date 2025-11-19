@@ -1,5 +1,4 @@
 import dataclasses
-import os
 
 import datasets
 import peft
@@ -19,16 +18,20 @@ class ModelTrainerConfig:
     eval_dataset: datasets.Dataset
 
 
-def get_model_and_tokenizer(hyper_parameters: config.HyperParameters, device: torch.device):
-    use_qlora = getattr(hyper_parameters, "use_qlora", False)
-
-    attn_impl = "flash_attention_2" if device.type == "cuda" else "sdpa"
-    torch_dtype = None if use_qlora else (torch.bfloat16 if device.type in {"cuda", "mps"} else torch.float32)
+def get_model_and_tokenizer(
+    hyper_parameters: config.HyperParameters, device: torch.device, local_rank: int
+) -> tuple[transformers.PreTrainedModel, transformers.PreTrainedTokenizer]:
+    attn_impl = "sdpa"  # Can only use SDPA due to patching
+    torch_dtype = (
+        None
+        if hyper_parameters.use_qlora
+        else (torch.bfloat16 if device.type in {"cuda", "mps"} else torch.float32)
+    )
 
     quantization_config = None
     device_map = None
 
-    if use_qlora and device.type == "cuda":
+    if hyper_parameters.use_qlora and device.type == "cuda":
         q = hyper_parameters.qlora_config
         quantization_config = transformers.BitsAndBytesConfig(
             load_in_4bit=q.load_in_4bit,
@@ -37,8 +40,7 @@ def get_model_and_tokenizer(hyper_parameters: config.HyperParameters, device: to
             bnb_4bit_compute_dtype=getattr(torch, q.bnb_4bit_compute_dtype),
         )
         # Pin to this rank's GLOBAL GPU index (since CUDA_VISIBLE_DEVICES isn't set)
-        local_rank = int(os.environ.get("LOCAL_RANK", "0"))
-        device_map = {"": f"cuda:{local_rank}"}   # <-- not {"": 0}
+        device_map = {"": f"cuda:{local_rank}"}  # <-- not {"": 0}
 
     llm_model = transformers.AutoModelForCausalLM.from_pretrained(
         hyper_parameters.model,
@@ -49,22 +51,8 @@ def get_model_and_tokenizer(hyper_parameters: config.HyperParameters, device: to
     )
 
     tokenizer = transformers.AutoTokenizer.from_pretrained(hyper_parameters.model)
-
-    if tokenizer.pad_token is None:
-        tokenizer.pad_token = tokenizer.eos_token or tokenizer.unk_token
-    llm_model.config.pad_token_id = tokenizer.pad_token_id
-    if tokenizer.eos_token_id is not None:
-        llm_model.config.eos_token_id = tokenizer.eos_token_id
-    if tokenizer.bos_token_id is not None:
-        llm_model.config.bos_token_id = tokenizer.bos_token_id
-
     tokenizer.add_special_tokens({"additional_special_tokens": [config.MASK_TOKEN]})
     llm_model.resize_token_embeddings(len(tokenizer))
-
-    # Debug (you can remove later)
-    print(f"[rank{os.environ.get('LOCAL_RANK','?')}] "
-          f"hf_device_map={getattr(llm_model, 'hf_device_map', None)} "
-          f"is_4bit={getattr(llm_model, 'is_loaded_in_4bit', False)}")
 
     return llm_model, tokenizer
 

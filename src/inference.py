@@ -2,12 +2,13 @@ import torch
 import transformers
 
 
-def first_idx(row_ids: torch.Tensor, end_token_id: int, max_length: int) -> int:
-    pos = (row_ids == end_token_id).nonzero(as_tuple=False)
+def _first_idx(row_input_ids: torch.Tensor, end_token_id: int) -> int:
+    max_length = row_input_ids.shape[0]
+    pos = (row_input_ids == end_token_id).nonzero(as_tuple=False)
     return pos[0].item() if pos.numel() > 0 else max_length
 
 
-def get_quotas(init_mask_counts: torch.Tensor, steps: int) -> torch.Tensor:
+def _get_quotas(init_mask_counts: torch.Tensor, steps: int) -> torch.Tensor:
     base = init_mask_counts // steps
     rem = init_mask_counts % steps
     return torch.stack(
@@ -47,20 +48,20 @@ class DiffusionInference:
 
         # Work on copies to avoid mutating the original batch in-place.
         input_ids = batch["input_ids"].clone()
-        attention_mask = batch.get("attention_mask", None)
+        attention_mask = batch["attention_mask"]
 
-        device = input_ids.device
+        device = self.model.device
         batch_size, L = input_ids.shape
 
         # Initial EOS boundaries and initial mask counts (only up to EOS!)
         eos_idx = torch.tensor(
-            [first_idx(input_ids[b], self.end_token_id, L) for b in range(B)]
+            [_first_idx(input_ids[b], self.end_token_id) for b in range(batch_size)]
         ).to(device)
         init_mask_counts = torch.tensor(
-            [(input_ids[b, : eos_idx[b]] == self.mask_token_id).sum() for b in range(B)]
+            [(input_ids[b, : eos_idx[b]] == self.mask_token_id).sum() for b in range(batch_size)]
         ).to(device)
 
-        quotas = get_quotas(init_mask_counts, self.steps)
+        quotas = _get_quotas(init_mask_counts, self.steps)
 
         for s in range(self.steps):
             # Forward pass
@@ -70,7 +71,7 @@ class DiffusionInference:
             # For each row, pick top-k masked positions by confidence (max logit).
             for b in range(batch_size):
                 # Recompute EOS boundary each step (it may have been newly predicted).
-                e = first_idx(input_ids[b], self.end_token_id, L)
+                e = _first_idx(input_ids[b], self.end_token_id, L)
 
                 # Masked positions strictly before EOS
                 mask_pos = (

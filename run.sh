@@ -97,6 +97,19 @@ fi
 
 echo "Training completed successfully!"
 echo ""
+
+# Check if debug mode is enabled
+DEBUG_MODE=$(echo "${HYPERPARAMETERS_JSON}" | jq -r '.debug // false')
+
+if [ "${DEBUG_MODE}" = "true" ]; then
+    echo "========================================"
+    echo "Debug Mode Enabled"
+    echo "========================================"
+    echo "Shutdown SKIPPED due to debug mode"
+    echo "Training completed at: $(date)"
+    exit 0
+fi
+
 echo "========================================"
 echo "Initiating System Shutdown"
 echo "========================================"
