@@ -1,6 +1,6 @@
 debug: false
-batch_size: 4
-epochs: 2
+batch_size: 20
+epochs: 1
 learning_rate: 1.0e-3
 use_qlora: false
 dataloader_num_workers: 8

@@ -107,18 +107,20 @@ def main(hyper_parameters_json: str):
         eval_dataset=eval_dataset,
         data_collator=data.PretrainingCollateFn(tokenizer, max_length=hyper_parameters.max_length),
     )
+    log_interval = (
+        len(train_dataset)
+        // hyper_parameters.batch_size
+        // world_size
+        // hyper_parameters.log_frequency_per_epoch
+    )
+    logger.info(f"Log interval: {log_interval}")
     callbacks = [
         evaluator.AccelerateEvalCallback(
             eval_dataset=model_trainer_config.eval_dataset,
             collate_fn=model_trainer_config.data_collator,
             mask_token_id=tokenizer.convert_tokens_to_ids(config.MASK_TOKEN),
             per_device_eval_batch_size=hyper_parameters.batch_size,
-            log_interval=(
-                len(train_dataset)
-                // hyper_parameters.batch_size
-                // world_size
-                // hyper_parameters.log_frequency_per_epoch
-            ),
+            log_interval=log_interval,
         ),
     ]
     trainer = model.get_trainer(model_trainer_config, callbacks, hyper_parameters)

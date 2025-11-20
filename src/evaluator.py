@@ -5,6 +5,8 @@ import accelerate
 import datasets
 import torch
 import transformers
+import wandb
+from loguru import logger
 from torch.utils.data import DataLoader
 
 from src import data
@@ -33,7 +35,6 @@ def evaluate_accelerate(
         collate_fn=collate_fn,
         pin_memory=True if torch.cuda.is_available() else False,
     )
-
     if accelerator is not None:
         dataloader = accelerator.prepare_data_loader(dataloader)
         device: torch.device = accelerator.device  # type: ignore[assignment]
@@ -73,6 +74,7 @@ def evaluate_accelerate(
 
     mask_acc = total_correct_mask / total_tokens_mask
     nonmask_acc = total_correct_nonmask / total_tokens_nonmask
+    model.train()
     return {"eval/non_mask_accuracy": float(nonmask_acc), "eval/mask_accuracy": float(mask_acc)}
 
 
@@ -94,16 +96,14 @@ class AccelerateEvalCallback(transformers.TrainerCallback):
         self.last_logged_step = -1
 
     def on_step_end(self, args, state, control, **kwargs):
-        trainer = kwargs.get("trainer", None)
-        model = kwargs.get("model", None)
-        if trainer is None or model is None:
-            return
+        model = kwargs["model"]
         if (
             state.global_step % self.log_interval == 0
             and state.global_step != self.last_logged_step
         ):
             self.last_logged_step = state.global_step
-            acc = getattr(trainer, "accelerator", None)
+            acc = accelerate.Accelerator()
+            logger.info(f"Evaluating model on {len(self.eval_dataset)} rows")
             metrics = evaluate_accelerate(
                 model=model,
                 eval_dataset=self.eval_dataset,
@@ -114,4 +114,5 @@ class AccelerateEvalCallback(transformers.TrainerCallback):
             )
             if acc is None or acc.is_main_process:
                 logs = {**metrics, "step": int(state.global_step)}
-                trainer.log(logs)
+                logger.info(f"Evaluation metrics: {logs}")
+                wandb.log(logs)
