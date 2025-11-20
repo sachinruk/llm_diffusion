@@ -5,8 +5,8 @@ import accelerate
 import datasets
 import torch
 import transformers
-from torch.utils.data import DataLoader
 import wandb
+from torch.utils.data import DataLoader
 
 from src import data
 
@@ -115,5 +115,5 @@ class AccelerateEvalCallback(transformers.TrainerCallback):
             )
             if acc is None or acc.is_main_process:
                 logs = {**metrics, "step": int(state.global_step)}
-                wandb.log(logs, step=int(state.global_step))
+                wandb.log(logs)
                 trainer.log(logs)
