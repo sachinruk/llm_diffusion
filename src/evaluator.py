@@ -5,7 +5,6 @@ import accelerate
 import datasets
 import torch
 import transformers
-import wandb
 from torch.utils.data import DataLoader
 
 from src import data
@@ -74,7 +73,7 @@ def evaluate_accelerate(
 
     mask_acc = total_correct_mask / total_tokens_mask
     nonmask_acc = total_correct_nonmask / total_tokens_nonmask
-    return {"non_mask_accuracy": float(nonmask_acc), "mask_accuracy": float(mask_acc)}
+    return {"eval/non_mask_accuracy": float(nonmask_acc), "eval/mask_accuracy": float(mask_acc)}
 
 
 class AccelerateEvalCallback(transformers.TrainerCallback):
@@ -115,5 +114,4 @@ class AccelerateEvalCallback(transformers.TrainerCallback):
             )
             if acc is None or acc.is_main_process:
                 logs = {**metrics, "step": int(state.global_step)}
-                wandb.log(logs)
                 trainer.log(logs)
