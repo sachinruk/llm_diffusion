@@ -1,5 +1,13 @@
+from __future__ import annotations
+
+import accelerate
+import datasets
+from loguru import logger
 import torch
 import transformers
+from torch.utils.data import DataLoader
+
+from src import config, data
 
 
 def _get_quotas(init_mask_counts: torch.Tensor, steps: int) -> torch.Tensor:
@@ -198,6 +206,72 @@ def diffusion_inference_stepwise(
             "attention_mask": attention_mask,
         }
     )
+
+
+@torch.inference_mode()
+def run_eval_inference(
+    model: transformers.PreTrainedModel,
+    tokenizer: transformers.PreTrainedTokenizer,
+    eval_dataset: datasets.Dataset,
+    hyper_parameters: config.HyperParameters,
+) -> None:
+    """Run diffusion inference across the evaluation set using Accelerate."""
+
+    accelerator = accelerate.Accelerator()
+    logger.info(
+        f"[rank{accelerator.local_process_index}] Starting accelerated inference over {len(eval_dataset)} rows"
+    )
+
+    collate_fn = data.SFTCollateFn(
+        tokenizer,
+        max_length=hyper_parameters.max_length,
+        min_mask_probability=1.0,
+        max_mask_probability=1.0,
+    )
+
+    dataloader = DataLoader(
+        eval_dataset,
+        batch_size=hyper_parameters.batch_size,
+        shuffle=False,
+        drop_last=False,
+        collate_fn=collate_fn,
+        num_workers=hyper_parameters.dataloader_num_workers,
+        pin_memory=hyper_parameters.pin_memory and torch.cuda.is_available(),
+    )
+    dataloader = accelerator.prepare_data_loader(dataloader)
+
+    mask_token_id = tokenizer.convert_tokens_to_ids(config.MASK_TOKEN)
+    end_token_id = tokenizer.eos_token_id
+
+    generated_text: list[str] = []
+    for batch in dataloader:
+        batch = batch.to(accelerator.device)
+        infilled_batch = diffusion_inference_stepwise(
+            model=model,
+            batch=batch,
+            mask_token_id=mask_token_id,
+            end_token_id=end_token_id,
+            steps=hyper_parameters.inference_steps,
+        )
+
+        gathered_input_ids = accelerator.gather_for_metrics(infilled_batch["input_ids"])
+        gathered_attention = accelerator.gather_for_metrics(
+            infilled_batch["attention_mask"]
+        )
+        if accelerator.is_main_process:
+            for input_ids, attention_mask in zip(gathered_input_ids, gathered_attention):
+                decoded = tokenizer.decode(
+                    input_ids[attention_mask.bool()], skip_special_tokens=True
+                )
+                generated_text.append(decoded)
+
+    accelerator.wait_for_everyone()
+
+    if accelerator.is_main_process:
+        output_path = hyper_parameters.output_dir / "eval_inference_outputs.txt"
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text("\n".join(generated_text))
+        logger.info(f"Saved eval inference outputs to {output_path}")
 
 
 # Optional: keep a tiny OO wrapper that just calls the functional version.

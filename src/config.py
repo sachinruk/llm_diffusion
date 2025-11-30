@@ -66,3 +66,4 @@ class HyperParameters(pydantic.BaseModel):
     qlora_config: QLoRAConfig = QLoRAConfig()
 
     max_length: int = 768
+    inference_steps: int = 8
