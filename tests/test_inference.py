@@ -137,6 +137,15 @@ def test_compute_step_updates():
         ]
     )
 
+    allowed_masks = inference._compute_allowed_masks(input_ids, mask_token_id, end_token_id)
+
+    assert torch.all(allowed_masks == torch.tensor(
+        [
+            [True, True, True, False, False, False],
+            [False, True, True, False, False, False],
+        ]
+    ))
+
     # Create logits with deterministic confidence values
     batch_size, seq_len = input_ids.shape
     vocab_size = 50
@@ -164,7 +173,7 @@ def test_compute_step_updates():
     step_quota = torch.tensor([2, 1])
 
     batch_indices, pos_indices, new_tokens = inference.compute_step_updates(
-        logits, input_ids, step_quota, mask_token_id, end_token_id
+        logits, input_ids, allowed_masks, step_quota
     )
 
     # Should unmask 2 positions in row 0 (highest confidence: pos 0 and 1)
@@ -175,9 +184,10 @@ def test_compute_step_updates():
 
     # Check row 0 updates (positions 0 and 1 with highest confidence)
     row0_mask = batch_indices == 0
-    assert row0_mask.sum() == 2
     row0_positions = pos_indices[row0_mask]
     row0_tokens = new_tokens[row0_mask]
+    
+    assert row0_mask.sum() == 2
     assert 0 in row0_positions
     assert 1 in row0_positions
     assert 10 in row0_tokens
@@ -200,9 +210,10 @@ def test_compute_step_updates_empty():
     input_ids = torch.tensor([[1, 5, 3, 2, 7, 8]])
     logits = torch.randn(1, 6, vocab_size)
     step_quota = torch.tensor([2])
+    allowed_masks = inference._compute_allowed_masks(input_ids, mask_token_id, end_token_id)
 
     batch_indices, pos_indices, new_tokens = inference.compute_step_updates(
-        logits, input_ids, step_quota, mask_token_id, end_token_id
+        logits, input_ids, allowed_masks, step_quota
     )
 
     assert len(batch_indices) == 0
@@ -213,9 +224,10 @@ def test_compute_step_updates_empty():
     input_ids = torch.tensor([[99, 99, 3, 2, 7, 8]])
     logits = torch.randn(1, 6, vocab_size)
     step_quota = torch.tensor([0])
+    allowed_masks = inference._compute_allowed_masks(input_ids, mask_token_id, end_token_id)
 
     batch_indices, pos_indices, new_tokens = inference.compute_step_updates(
-        logits, input_ids, step_quota, mask_token_id, end_token_id
+        logits, input_ids, allowed_masks, step_quota
     )
 
     assert len(batch_indices) == 0

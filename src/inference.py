@@ -63,9 +63,8 @@ def _compute_allowed_masks(
 def compute_step_updates(
     logits: torch.Tensor,
     input_ids: torch.Tensor,
+    allowed_masks: torch.Tensor,
     step_quota: torch.Tensor,
-    mask_token_id: int,
-    end_token_id: int,
 ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
     """
     For a single diffusion step, determine which positions to unmask,
@@ -74,9 +73,8 @@ def compute_step_updates(
     Args:
         logits: [B, L, V]
         input_ids: [B, L]
+        allowed_masks: [B, L] bool tensor indicating which positions can be filled this step.
         step_quota: [B] long tensor indicating how many tokens to unmask per row.
-        mask_token_id: mask token id
-        end_token_id: EOS token id
 
     Returns:
         batch_indices: [N] indices of rows to update.
@@ -84,15 +82,10 @@ def compute_step_updates(
         new_tokens:    [N] token ids to write at those positions.
     """
     device = input_ids.device
-    batch_size, seq_len, _ = logits.shape
+    batch_size, _, _ = logits.shape
 
     # [B, L], [B, L]
     confidence, pred_tok = logits.max(dim=-1)
-
-    # Allowed positions (masked & before EOS)
-    allowed_masks: torch.Tensor = _compute_allowed_masks(
-        input_ids, mask_token_id, end_token_id
-    )  # [B, L]
 
     # How many mask positions remain in each row
     remaining_per_row: torch.Tensor = allowed_masks.sum(dim=-1)  # [B]
@@ -174,6 +167,9 @@ def diffusion_inference_stepwise(
         logits: torch.Tensor = model(input_ids=input_ids, attention_mask=attention_mask).logits
 
         step_quota: torch.Tensor = quotas[step]  # [B]
+        allowed_masks: torch.Tensor = _compute_allowed_masks(
+            input_ids, mask_token_id, end_token_id
+        )  # [B, L]
         (
             batch_indices,
             pos_indices,
@@ -181,9 +177,8 @@ def diffusion_inference_stepwise(
         ) = compute_step_updates(
             logits=logits,
             input_ids=input_ids,
+            allowed_masks=allowed_masks,
             step_quota=step_quota,
-            mask_token_id=mask_token_id,
-            end_token_id=end_token_id,
         )
 
         # If nothing to update this step and no masks remain, we can exit early
