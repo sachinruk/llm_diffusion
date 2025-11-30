@@ -8,7 +8,7 @@ import torch
 import wandb
 from loguru import logger
 
-from src import config, data, evaluator, model
+from src import config, data, evaluator, inference, model
 
 
 def _wandb_init(hyper_parameters: config.HyperParameters):
@@ -132,6 +132,15 @@ def main(hyper_parameters_json: str):
     trainer.train()
     logger.info("SFT complete")
     trainer.save_model(str(hyper_parameters.output_dir / "sft_model"))
+
+    logger.info("Running accelerated inference on evaluation set")
+    inference.run_eval_inference(
+        model=llm_model,
+        tokenizer=tokenizer,
+        eval_dataset=eval_dataset,
+        hyper_parameters=hyper_parameters,
+    )
+    logger.info("Eval inference complete")
 
 
 if __name__ == "__main__":
