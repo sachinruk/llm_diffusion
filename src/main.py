@@ -8,7 +8,7 @@ import torch
 import wandb
 from loguru import logger
 
-from src import config, data, evaluator, model
+from src import config, data, evaluator, inference, model
 
 
 def _wandb_init(hyper_parameters: config.HyperParameters):
@@ -131,6 +131,14 @@ def main(hyper_parameters_json: str):
     trainer.data_collator = data.SFTCollateFn(tokenizer, max_length=hyper_parameters.max_length)
     trainer.train()
     logger.info("SFT complete")
+
+    output = inference.diffusion_inference_stepwise(
+        model=llm_model,
+        batch=trainer.data_collator(train_dataset),
+        mask_token_id=tokenizer.convert_tokens_to_ids(config.MASK_TOKEN),
+        end_token_id=tokenizer.convert_tokens_to_ids(config.IM_START_TOKEN),
+        steps=hyper_parameters.steps,
+    )
     trainer.save_model(str(hyper_parameters.output_dir / "sft_model"))
 
 

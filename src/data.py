@@ -85,11 +85,13 @@ def tokenize_text(
     examples: list[dict[str, Any]],
     tokenizer: transformers.PreTrainedTokenizer,
     max_length: int = 1024,
+    padding_side: str = "right",
+    add_generation_prompt: bool = False,
 ) -> transformers.BatchEncoding:
     string_examples: list[str] = tokenizer.apply_chat_template(
         [example["messages"] for example in examples],
         tokenize=False,
-        add_generation_prompt=False,
+        add_generation_prompt=add_generation_prompt,
     )
 
     return tokenizer(
@@ -98,6 +100,7 @@ def tokenize_text(
         max_length=max_length,
         return_tensors="pt",
         truncation=True,
+        padding_side=padding_side,
     )
 
 
@@ -165,3 +168,22 @@ class SFTCollateFn(CollateFn):
 
         encoded_batch["labels"] = labels
         return encoded_batch
+
+
+class InferenceCollateFn(CollateFn):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    def __call__(
+        self, examples: list[dict[str, Any]]
+    ) -> tuple[transformers.BatchEncoding, list[str]]:
+        input_messages = [{"messages": [example["messages"][0]]} for example in examples]
+        actual_answers: list[str] = [example["messages"][1]["content"] for example in examples]
+        encoded_batch = tokenize_text(
+            input_messages,
+            self.tokenizer,
+            self.max_length,
+            add_generation_prompt=True,
+            padding_side="left",
+        )
+        return encoded_batch, actual_answers
