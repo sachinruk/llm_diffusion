@@ -170,10 +170,12 @@ class SFTCollateFn(CollateFn):
         return encoded_batch
 
 
-class InferenceCollateFn(CollateFn):
-    def __init__(self, *args, mask_token_buffer: int = 20, **kwargs):
-        super().__init__(*args, **kwargs)
+class InferenceCollateFn:
+    def __init__(self, tokenizer: transformers.PreTrainedTokenizer, max_length: int = 1024, mask_token_buffer: int = 20):
+        self.tokenizer = tokenizer
+        self.max_length = max_length
         self.mask_token_buffer = mask_token_buffer
+        self.mask_token_id = tokenizer.convert_tokens_to_ids(config.MASK_TOKEN)
 
     def __call__(
         self, examples: list[dict[str, Any]]
@@ -204,7 +206,7 @@ class InferenceCollateFn(CollateFn):
         batch_size = input_ids.shape[0]
 
         # Create mask tokens to append
-        mask_tokens = torch.full(
+        mask_tokens: torch.Tensor = torch.full(
             (batch_size, num_mask_tokens),
             fill_value=self.mask_token_id,
             dtype=input_ids.dtype,

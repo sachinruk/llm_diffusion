@@ -114,11 +114,12 @@ def main(hyper_parameters_json: str):
         // hyper_parameters.log_frequency_per_epoch
     )
     logger.info(f"Log interval: {log_interval}")
+    mask_token_id: int = tokenizer.convert_tokens_to_ids(config.MASK_TOKEN)
     callbacks = [
         evaluator.AccelerateEvalCallback(
             eval_dataset=model_trainer_config.eval_dataset,
             collate_fn=model_trainer_config.data_collator,
-            mask_token_id=tokenizer.convert_tokens_to_ids(config.MASK_TOKEN),
+            mask_token_id=mask_token_id,
             per_device_eval_batch_size=hyper_parameters.batch_size,
             log_interval=log_interval,
         ),
@@ -132,13 +133,27 @@ def main(hyper_parameters_json: str):
     trainer.train()
     logger.info("SFT complete")
 
+    inference_collate_fn = data.InferenceCollateFn(
+        tokenizer, max_length=hyper_parameters.max_length
+    )
+    test_batch, actual_answers = inference_collate_fn(eval_dataset.select(range(min(len(eval_dataset), 20))))
     output = inference.diffusion_inference_stepwise(
         model=llm_model,
-        batch=trainer.data_collator(train_dataset),
-        mask_token_id=tokenizer.convert_tokens_to_ids(config.MASK_TOKEN),
-        end_token_id=tokenizer.convert_tokens_to_ids(config.IM_START_TOKEN),
-        steps=hyper_parameters.steps,
+        batch=test_batch,
+        mask_token_id=mask_token_id,
+        end_token_id=tokenizer.eos_token_id,
+        steps=hyper_parameters.diffusion_steps,
     )
+
+    # Log predictions to wandb table
+    inference.log_output(
+        input_batch=test_batch,
+        output_batch=output,
+        mask_token_id=mask_token_id,
+        tokenizer=tokenizer,
+        actual_answers=actual_answers,
+    )
+
     trainer.save_model(str(hyper_parameters.output_dir / "sft_model"))
 
 

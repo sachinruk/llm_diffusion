@@ -1,5 +1,7 @@
 import torch
 import transformers
+import wandb
+from tqdm.auto import tqdm
 
 
 def _get_quotas(init_mask_counts: torch.Tensor, steps: int) -> torch.Tensor:
@@ -159,7 +161,7 @@ def diffusion_inference_stepwise(
     quotas: torch.Tensor = _get_quotas(init_mask_counts, steps).to(device=device)  # [steps, B]
 
     # ---- diffusion steps ----
-    for step in range(steps):
+    for step in tqdm(range(steps)):
         # Optional global early exit if no masks remain
         if not (input_ids == mask_token_id).any():
             break
@@ -200,26 +202,35 @@ def diffusion_inference_stepwise(
     )
 
 
-# Optional: keep a tiny OO wrapper that just calls the functional version.
-class DiffusionInference:
-    def __init__(
-        self,
-        model: transformers.PreTrainedModel,
-        mask_token_id: int,
-        end_token_id: int,
-        steps: int,
-    ) -> None:
-        self.model = model
-        self.mask_token_id = mask_token_id
-        self.end_token_id = end_token_id
-        self.steps = steps
+def log_output(
+    input_batch: transformers.BatchEncoding,
+    output_batch: transformers.BatchEncoding,
+    mask_token_id: int,
+    tokenizer: transformers.PreTrainedTokenizer,
+    actual_answers: list[str],
+) -> None:
+    """
+    Log the output of the diffusion inference to a wandb table.
 
-    @torch.inference_mode()
-    def __call__(self, batch: transformers.BatchEncoding) -> transformers.BatchEncoding:
-        return diffusion_inference_stepwise(
-            model=self.model,
-            batch=batch,
-            mask_token_id=self.mask_token_id,
-            end_token_id=self.end_token_id,
-            steps=self.steps,
-        )
+    Args:
+        input_batch: transformers.BatchEncoding with "input_ids" and "attention_mask"
+        output_batch: transformers.BatchEncoding with "input_ids" and "attention_mask"
+        mask_token_id: mask token id
+        tokenizer: tokenizer
+        actual_answers: list of actual answers
+    """
+    mask_length = (input_batch["input_ids"][0] == mask_token_id).sum()
+    question_length = input_batch["input_ids"].shape[1] - mask_length
+    questions = tokenizer.batch_decode(
+        input_batch["input_ids"][:, :question_length], skip_special_tokens=True
+    )
+    predicted_answers = tokenizer.batch_decode(
+        output_batch["input_ids"][:, -mask_length:], skip_special_tokens=True
+    )
+
+    # Create wandb table with questions, actual answers, and predicted answers
+    table = wandb.Table(columns=["question", "actual_answer", "predicted_answer"])
+    for question, actual, predicted in zip(questions, actual_answers, predicted_answers):
+        table.add_data(question, actual, predicted)
+
+    wandb.log({"inference/predictions": table})
