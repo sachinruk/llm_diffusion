@@ -141,6 +141,15 @@ def main(hyper_parameters_json: str):
     )
     trainer.save_model(str(hyper_parameters.output_dir / "sft_model"))
 
+    logger.info("Running accelerated inference on evaluation set")
+    inference.run_eval_inference(
+        model=llm_model,
+        tokenizer=tokenizer,
+        eval_dataset=eval_dataset,
+        hyper_parameters=hyper_parameters,
+    )
+    logger.info("Eval inference complete")
+
 
 if __name__ == "__main__":
     main()
