@@ -171,14 +171,17 @@ class SFTCollateFn(CollateFn):
 
 
 class InferenceCollateFn(CollateFn):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, mask_token_buffer: int = 20, **kwargs):
         super().__init__(*args, **kwargs)
+        self.mask_token_buffer = mask_token_buffer
 
     def __call__(
         self, examples: list[dict[str, Any]]
     ) -> tuple[transformers.BatchEncoding, list[str]]:
-        input_messages = [{"messages": [example["messages"][0]]} for example in examples]
         actual_answers: list[str] = [example["messages"][1]["content"] for example in examples]
+
+        # Encode only the questions (with generation prompt)
+        input_messages = [{"messages": [example["messages"][0]]} for example in examples]
         encoded_batch = tokenize_text(
             input_messages,
             self.tokenizer,
@@ -186,4 +189,35 @@ class InferenceCollateFn(CollateFn):
             add_generation_prompt=True,
             padding_side="left",
         )
+
+        # Tokenize answers to find max length
+        tokenized_answers = self.tokenizer(
+            actual_answers,
+            padding=False,
+            add_special_tokens=False,
+        )
+        max_answer_length = max(len(ids) for ids in tokenized_answers["input_ids"])
+        num_mask_tokens = max_answer_length + self.mask_token_buffer
+
+        input_ids: torch.Tensor = encoded_batch["input_ids"]
+        attention_mask: torch.Tensor = encoded_batch["attention_mask"]
+        batch_size = input_ids.shape[0]
+
+        # Create mask tokens to append
+        mask_tokens = torch.full(
+            (batch_size, num_mask_tokens),
+            fill_value=self.mask_token_id,
+            dtype=input_ids.dtype,
+            device=input_ids.device,
+        )
+        mask_attention = torch.ones(
+            (batch_size, num_mask_tokens),
+            dtype=attention_mask.dtype,
+            device=attention_mask.device,
+        )
+
+        # Append mask tokens to input_ids and attention_mask
+        encoded_batch["input_ids"] = torch.cat([input_ids, mask_tokens], dim=1)
+        encoded_batch["attention_mask"] = torch.cat([attention_mask, mask_attention], dim=1)
+
         return encoded_batch, actual_answers

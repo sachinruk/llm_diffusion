@@ -137,20 +137,34 @@ def test_sft_collate_fn_full_masking():
 
 
 def test_inference_collate_fn():
-    """Test InferenceCollateFn returns encoded batch and actual answers."""
+    """Test InferenceCollateFn returns encoded batch with mask tokens appended."""
     mock_tokenizer = MagicMock()
-    mock_tokenizer.convert_tokens_to_ids.return_value = 99
+    mask_token_id = 99
+    mock_tokenizer.convert_tokens_to_ids.return_value = mask_token_id
     mock_tokenizer.apply_chat_template.return_value = [
         "<|im_start|>user\nWhat is 2+2?<|im_start|>assistant\n"
     ]
-    mock_tokenizer.return_value = {
-        "input_ids": torch.tensor([[100, 1, 2, 3, 100, 4]]),
-        "attention_mask": torch.tensor([[1, 1, 1, 1, 1, 1]]),
-    }
 
+    # First call: tokenize_text for question, Second call: tokenize answers for length
+    question_input_ids = torch.tensor([[100, 1, 2, 3, 100, 4]])
+    question_attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1]])
+    answer_token_ids = [[5, 6, 7]]  # Answer has 3 tokens
+
+    mock_tokenizer.side_effect = [
+        # First call: tokenize_text for the question
+        {
+            "input_ids": question_input_ids,
+            "attention_mask": question_attention_mask,
+        },
+        # Second call: tokenize answers (returns list, not tensor)
+        {"input_ids": answer_token_ids},
+    ]
+
+    mask_token_buffer = 5
     collate_fn = data.InferenceCollateFn(
         tokenizer=mock_tokenizer,
         max_length=1024,
+        mask_token_buffer=mask_token_buffer,
     )
 
     examples = [
@@ -170,11 +184,34 @@ def test_inference_collate_fn():
     assert isinstance(actual_answers, list)
     assert actual_answers == ["4"]
 
+    # Verify mask tokens are appended
+    # num_mask_tokens = max_answer_length (3) + buffer (5) = 8
+    expected_num_mask_tokens = len(answer_token_ids[0]) + mask_token_buffer
+    expected_total_length = question_input_ids.shape[1] + expected_num_mask_tokens
+
+    assert encoded_batch["input_ids"].shape[1] == expected_total_length
+    assert encoded_batch["attention_mask"].shape[1] == expected_total_length
+
+    # Verify the appended tokens are all mask tokens
+    appended_tokens = encoded_batch["input_ids"][0, question_input_ids.shape[1] :]
+    assert torch.all(appended_tokens == mask_token_id)
+
+    # Verify attention mask is all 1s for the appended region
+    appended_attention = encoded_batch["attention_mask"][0, question_input_ids.shape[1] :]
+    assert torch.all(appended_attention == 1)
+
     # Verify tokenizer was called with correct arguments
     mock_tokenizer.apply_chat_template.assert_called_once()
     call_kwargs = mock_tokenizer.apply_chat_template.call_args.kwargs
     assert call_kwargs["add_generation_prompt"] is True
 
-    mock_tokenizer.assert_called_once()
-    call_kwargs = mock_tokenizer.call_args.kwargs
-    assert call_kwargs["padding_side"] == "left"
+    # Verify tokenizer was called twice (once for question, once for answers)
+    assert mock_tokenizer.call_count == 2
+
+    # Verify first call (question) used left padding
+    first_call_kwargs = mock_tokenizer.call_args_list[0].kwargs
+    assert first_call_kwargs["padding_side"] == "left"
+
+    # Verify second call (answers) used no special tokens
+    second_call_kwargs = mock_tokenizer.call_args_list[1].kwargs
+    assert second_call_kwargs["add_special_tokens"] is False
