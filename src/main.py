@@ -129,19 +129,21 @@ def main(hyper_parameters_json: str):
     logger.info("Pretraining complete")
 
     # Change data collator for SFT phase and continue training the same LoRA
-    trainer.data_collator = data.SFTCollateFn(tokenizer, max_length=hyper_parameters.max_length)
-    trainer.train()
-    logger.info("SFT complete")
+    # trainer.data_collator = data.SFTCollateFn(tokenizer, max_length=hyper_parameters.max_length)
+    # trainer.train()
+    # logger.info("SFT complete")
 
     inference_collate_fn = data.InferenceCollateFn(
         tokenizer, max_length=hyper_parameters.max_length
     )
-    test_batch, actual_answers = inference_collate_fn(eval_dataset.select(range(min(len(eval_dataset), 20))))
+    test_batch, actual_answers = inference_collate_fn(
+        eval_dataset.select(range(min(len(eval_dataset), 20)))
+    )
     output = inference.diffusion_inference_stepwise(
         model=llm_model,
         batch=test_batch,
         mask_token_id=mask_token_id,
-        end_token_id=tokenizer.eos_token_id,
+        eos_token_id=tokenizer.eos_token_id,
         steps=hyper_parameters.diffusion_steps,
     )
 

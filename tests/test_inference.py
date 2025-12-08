@@ -67,17 +67,18 @@ def test__get_quotas_edge_cases():
 
 
 def test__compute_maskable_area():
-    """Test computing maskable area before first EOS token."""
+    """Test computing maskable area before second EOS token."""
     # Test with EOS at different positions
     # Assume EOS token id = 2
     end_token_id = 2
 
     # Batch with EOS at different positions
+    # The function returns True for positions before the SECOND EOS
     input_ids = torch.tensor(
         [
-            [1, 5, 3, 2, 7, 8],  # EOS at position 3
-            [4, 2, 9, 1, 2, 3],  # EOS at position 1
-            [6, 7, 8, 9, 1, 3],  # No EOS
+            [1, 5, 3, 2, 7, 8],  # One EOS at position 3 -> all True (no second EOS)
+            [4, 2, 9, 1, 2, 3],  # EOS at positions 1 and 4 -> False at/after position 4
+            [6, 7, 8, 9, 1, 3],  # No EOS -> all True
         ]
     )
 
@@ -85,9 +86,9 @@ def test__compute_maskable_area():
 
     expected = torch.tensor(
         [
-            [True, True, True, False, False, False],
-            [True, False, False, False, False, False],
-            [True, True, True, True, True, True],
+            [True, True, True, True, True, True],  # Only 1 EOS, all before "second"
+            [True, True, True, True, False, False],  # Second EOS at position 4
+            [True, True, True, True, True, True],  # No EOS at all
         ]
     )
 
@@ -97,15 +98,30 @@ def test__compute_maskable_area():
 
 
 def test__compute_allowed_masks():
-    """Test computing positions that can be filled (masked & before EOS)."""
+    """Test computing positions that can be filled (masked & before second EOS)."""
     mask_token_id = 99
     end_token_id = 2
 
+    # Positions are allowed if: (1) they are mask tokens AND (2) before second EOS
     input_ids = torch.tensor(
         [
-            [99, 99, 3, 2, 99, 8],  # 2 allowed masks (positions 0, 1)
-            [4, 99, 99, 99, 2, 99],  # 3 allowed masks (positions 1, 2, 3)
-            [99, 5, 99, 99, 1, 3],  # 3 allowed masks (positions 0, 2, 3)
+            [
+                99,
+                99,
+                3,
+                2,
+                99,
+                2,
+            ],  # Two EOS: positions 3 and 5 -> masks at 0,1,4 allowed (before pos 5)
+            [
+                4,
+                2,
+                99,
+                99,
+                2,
+                99,
+            ],  # Two EOS: positions 1 and 4 -> masks at 2,3 allowed (before pos 4)
+            [99, 5, 99, 99, 1, 3],  # No EOS -> all masks allowed (positions 0, 2, 3)
         ]
     )
 
@@ -113,9 +129,9 @@ def test__compute_allowed_masks():
 
     expected = torch.tensor(
         [
-            [True, True, False, False, False, False],
-            [False, True, True, True, False, False],
-            [True, False, True, True, False, False],
+            [True, True, False, False, True, False],  # masks at 0,1,4 before second EOS at 5
+            [False, False, True, True, False, False],  # masks at 2,3 before second EOS at 4
+            [True, False, True, True, False, False],  # all masks allowed (no second EOS)
         ]
     )
 
@@ -129,22 +145,25 @@ def test_compute_step_updates():
     mask_token_id = 99
     end_token_id = 2
 
-    # Create input with masks
+    # Create input with masks (using two EOS to define the maskable region)
     input_ids = torch.tensor(
         [
-            [99, 99, 99, 2, 5, 6],  # 3 masks before EOS
-            [1, 99, 99, 2, 99, 7],  # 2 masks before EOS
+            [2, 99, 99, 99, 2, 6],  # First EOS at 0, masks at 1,2,3, second EOS at 4
+            [2, 1, 99, 99, 2, 7],  # First EOS at 0, masks at 2,3, second EOS at 4
         ]
     )
 
     allowed_masks = inference._compute_allowed_masks(input_ids, mask_token_id, end_token_id)
 
-    assert torch.all(allowed_masks == torch.tensor(
-        [
-            [True, True, True, False, False, False],
-            [False, True, True, False, False, False],
-        ]
-    ))
+    assert torch.all(
+        allowed_masks
+        == torch.tensor(
+            [
+                [False, True, True, True, False, False],  # 3 masks before second EOS
+                [False, False, True, True, False, False],  # 2 masks before second EOS
+            ]
+        )
+    )
 
     # Create logits with deterministic confidence values
     batch_size, seq_len = input_ids.shape
@@ -152,22 +171,22 @@ def test_compute_step_updates():
     logits = torch.randn(batch_size, seq_len, vocab_size)
 
     # Set high confidence for specific positions and tokens
-    # Row 0, position 0: high confidence for token 10
-    logits[0, 0, :] = -10
-    logits[0, 0, 10] = 5.0
-    # Row 0, position 1: medium confidence for token 11
+    # Row 0, position 1: high confidence for token 10
     logits[0, 1, :] = -10
-    logits[0, 1, 11] = 3.0
-    # Row 0, position 2: low confidence for token 12
+    logits[0, 1, 10] = 5.0
+    # Row 0, position 2: medium confidence for token 11
     logits[0, 2, :] = -10
-    logits[0, 2, 12] = 1.0
+    logits[0, 2, 11] = 3.0
+    # Row 0, position 3: low confidence for token 12
+    logits[0, 3, :] = -10
+    logits[0, 3, 12] = 1.0
 
-    # Row 1, position 1: high confidence for token 20
-    logits[1, 1, :] = -10
-    logits[1, 1, 20] = 4.0
-    # Row 1, position 2: medium confidence for token 21
+    # Row 1, position 2: high confidence for token 20
     logits[1, 2, :] = -10
-    logits[1, 2, 21] = 2.0
+    logits[1, 2, 20] = 4.0
+    # Row 1, position 3: medium confidence for token 21
+    logits[1, 3, :] = -10
+    logits[1, 3, 21] = 2.0
 
     # Request 2 updates for row 0, 1 update for row 1
     step_quota = torch.tensor([2, 1])
@@ -176,27 +195,27 @@ def test_compute_step_updates():
         logits, input_ids, allowed_masks, step_quota
     )
 
-    # Should unmask 2 positions in row 0 (highest confidence: pos 0 and 1)
-    # Should unmask 1 position in row 1 (highest confidence: pos 1)
+    # Should unmask 2 positions in row 0 (highest confidence: pos 1 and 2)
+    # Should unmask 1 position in row 1 (highest confidence: pos 2)
     assert len(batch_indices) == 3
     assert len(pos_indices) == 3
     assert len(new_tokens) == 3
 
-    # Check row 0 updates (positions 0 and 1 with highest confidence)
+    # Check row 0 updates (positions 1 and 2 with highest confidence)
     row0_mask = batch_indices == 0
     row0_positions = pos_indices[row0_mask]
     row0_tokens = new_tokens[row0_mask]
-    
+
     assert row0_mask.sum() == 2
-    assert 0 in row0_positions
     assert 1 in row0_positions
+    assert 2 in row0_positions
     assert 10 in row0_tokens
     assert 11 in row0_tokens
 
-    # Check row 1 updates (position 1 with highest confidence)
+    # Check row 1 updates (position 2 with highest confidence)
     row1_mask = batch_indices == 1
     assert row1_mask.sum() == 1
-    assert pos_indices[row1_mask].item() == 1
+    assert pos_indices[row1_mask].item() == 2
     assert new_tokens[row1_mask].item() == 20
 
 
@@ -206,8 +225,8 @@ def test_compute_step_updates_empty():
     end_token_id = 2
     vocab_size = 50
 
-    # No masks remaining
-    input_ids = torch.tensor([[1, 5, 3, 2, 7, 8]])
+    # No masks remaining (two EOS tokens to define boundary)
+    input_ids = torch.tensor([[2, 1, 5, 3, 2, 8]])
     logits = torch.randn(1, 6, vocab_size)
     step_quota = torch.tensor([2])
     allowed_masks = inference._compute_allowed_masks(input_ids, mask_token_id, end_token_id)
@@ -220,8 +239,8 @@ def test_compute_step_updates_empty():
     assert len(pos_indices) == 0
     assert len(new_tokens) == 0
 
-    # Zero quota
-    input_ids = torch.tensor([[99, 99, 3, 2, 7, 8]])
+    # Zero quota (two EOS tokens to define boundary)
+    input_ids = torch.tensor([[2, 99, 99, 3, 2, 8]])
     logits = torch.randn(1, 6, vocab_size)
     step_quota = torch.tensor([0])
     allowed_masks = inference._compute_allowed_masks(input_ids, mask_token_id, end_token_id)

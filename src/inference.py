@@ -24,27 +24,27 @@ def _get_quotas(init_mask_counts: torch.Tensor, steps: int) -> torch.Tensor:
     )
 
 
-def _compute_maskable_area(input_ids: torch.Tensor, end_token_id: int) -> torch.Tensor:
+def _compute_maskable_area(input_ids: torch.Tensor, eos_token_id: int) -> torch.Tensor:
     """
-    Compute a boolean mask of positions strictly before the first EOS
+    Compute a boolean mask of positions strictly before the second EOS
     in each row.
 
     Args:
         input_ids: [B, L]
-        end_token_id: EOS token id
+        eos_token_id: EOS token id
 
     Returns:
         maskable_area: [B, L] bool tensor, True before first EOS, False at/after.
     """
-    eos_hits: torch.Tensor = input_ids == end_token_id
-    # cumsum over EOS hits is 0 until first EOS, then >=1
-    return ~(eos_hits.cumsum(dim=1).bool())
+    eos_hits: torch.Tensor = input_ids == eos_token_id
+    # cumsum over EOS hits is 0 until second EOS
+    return ~(eos_hits.cumsum(dim=1) > 1)
 
 
 def _compute_allowed_masks(
     input_ids: torch.Tensor,
     mask_token_id: int,
-    end_token_id: int,
+    eos_token_id: int,
 ) -> torch.Tensor:
     """
     Positions that can be filled this step: mask tokens before EOS.
@@ -52,12 +52,12 @@ def _compute_allowed_masks(
     Args:
         input_ids: [B, L]
         mask_token_id: mask token id
-        end_token_id: EOS token id
+        eos_token_id: EOS token id
 
     Returns:
         allowed_masks: [B, L] bool
     """
-    maskable_area: torch.Tensor = _compute_maskable_area(input_ids, end_token_id)  # [B, L]
+    maskable_area: torch.Tensor = _compute_maskable_area(input_ids, eos_token_id)  # [B, L]
     masked_tokens: torch.Tensor = input_ids == mask_token_id
     return maskable_area & masked_tokens
 
@@ -130,7 +130,7 @@ def diffusion_inference_stepwise(
     model: transformers.PreTrainedModel,
     batch: transformers.BatchEncoding,
     mask_token_id: int,
-    end_token_id: int,
+    eos_token_id: int,
     steps: int,
 ) -> transformers.BatchEncoding:
     """
@@ -140,7 +140,7 @@ def diffusion_inference_stepwise(
         model: HF model
         batch: BatchEncoding with "input_ids" and "attention_mask"
         mask_token_id: mask token id
-        end_token_id: EOS token id
+        eos_token_id: EOS token id
         steps: number of diffusion steps
 
     Returns:
@@ -156,7 +156,7 @@ def diffusion_inference_stepwise(
 
     # ---- initial quotas (no per-row Python loop) ----
     init_mask_counts: torch.Tensor = _compute_allowed_masks(
-        input_ids, mask_token_id, end_token_id
+        input_ids, mask_token_id, eos_token_id
     ).sum(dim=-1)  # [B]
     quotas: torch.Tensor = _get_quotas(init_mask_counts, steps).to(device=device)  # [steps, B]
 
@@ -170,7 +170,7 @@ def diffusion_inference_stepwise(
 
         step_quota: torch.Tensor = quotas[step]  # [B]
         allowed_masks: torch.Tensor = _compute_allowed_masks(
-            input_ids, mask_token_id, end_token_id
+            input_ids, mask_token_id, eos_token_id
         )  # [B, L]
         (
             batch_indices,

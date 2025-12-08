@@ -19,7 +19,7 @@ def load_dataset(
         download_mode=datasets.DownloadMode.REUSE_DATASET_IF_EXISTS,
     )
     if hyper_parameters.debug:
-        raw_dataset = raw_dataset.shuffle(seed=hyper_parameters.seed).select(range(100))
+        raw_dataset = raw_dataset.shuffle(seed=hyper_parameters.seed).select(range(40))
         logger.info(f"Debug mode: {raw_dataset.num_rows} rows")
     else:
         logger.info(f"Training mode: {raw_dataset.num_rows} rows")
@@ -171,7 +171,12 @@ class SFTCollateFn(CollateFn):
 
 
 class InferenceCollateFn:
-    def __init__(self, tokenizer: transformers.PreTrainedTokenizer, max_length: int = 1024, mask_token_buffer: int = 20):
+    def __init__(
+        self,
+        tokenizer: transformers.PreTrainedTokenizer,
+        max_length: int = 1024,
+        mask_token_buffer: int = 20,
+    ):
         self.tokenizer = tokenizer
         self.max_length = max_length
         self.mask_token_buffer = mask_token_buffer
